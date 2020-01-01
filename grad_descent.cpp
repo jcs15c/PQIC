@@ -33,9 +33,106 @@ F_params * bases[5];
 F_params * grad_bases[5];
 F_params * d_bases[5][5];
 
-// cost function of QLIC 
-//  a is coefficients for phi
-//  a0 is reference data
+// Find the cost of a linear level set function using only centroid moment data
+//  phi(x,y) = a[3]x + a[4]y + a[5]
+//  ref[0] = centroid x-coordinate
+//  ref[1] = centroid y-coordinate
+//  ref[2] = volume fraction
+double cost_PLIC( double a[], double ref[] )
+{
+    double the_cost = 0;
+
+    Phi2D phi0( a );
+    vector<Psi> psis{ Psi( &phi0 ) };
+    vector<int> ss{-1};
+
+    double xL[2] = {-1, -1};
+    double xU[2] = { 1,  1};
+    Box U( xL, xU, 2 );
+    
+
+    double temp;
+    temp = ( I( psis, ss, U, &cx, false, 5 ) / ref[2] - ref[0] );
+    the_cost += temp*temp;
+
+    temp = ( I( psis, ss, U, &cy, false, 5 ) / ref[2] - ref[1] );
+    the_cost += temp*temp;
+    
+    return the_cost;
+}
+
+// Perform one gradient descent step for PLIC
+//  an: current level set coefficients
+//  anp1: next level set coefficients
+//  refs: reference data
+void gradient_descent_step_PLIC( double an[], double anp1[], double gamma, double refs[] )
+{
+    double grad_an[5];
+    
+    partial_approx_PLIC( an, refs, grad_an );
+
+    anp1[0] = anp1[1] = anp1[2] = 0.0;
+    anp1[3] = an[3] - gamma*grad_an[3];
+    anp1[4] = an[4] - gamma*grad_an[4];
+    
+    flooding( anp1, refs[2], 0.0001 );
+}
+
+double partial_approx_PLIC( double an[], double refs[], double grad[] )
+{
+    double original, h = 0.00001;
+
+    // find gradient for first coefficient (a)
+    grad[3] = 0;
+    original = an[3];
+
+    an[3] = original + 2*h; 
+    flooding( an, refs[2], 0.0001 );
+    grad[3] += -cost_PLIC( an, refs );
+
+    an[3] = original + h;
+    flooding( an, refs[2], 0.0001 );
+    grad[3] += 8*cost_PLIC( an, refs );
+    
+    an[3] = original - h;
+    flooding( an, refs[2], 0.0001 );
+    grad[3] += -8*cost_PLIC( an, refs );
+    
+    an[3] = original + 2*h;
+    flooding( an, refs[2], 0.0001 );
+    grad[3] += cost_PLIC( an, refs );
+
+    grad[3] /= 12*h;
+    an[3] = original;
+
+    // find gradient for second coefficient (b)
+    grad[4] = 0;
+    original = an[4];
+
+    an[4] = original + 2*h; 
+    flooding( an, refs[2], 0.0001 );
+    grad[4] += -cost_PLIC( an, refs );
+
+    an[4] = original + h;
+    flooding( an, refs[2], 0.0001 );
+    grad[4] += 8*cost_PLIC( an, refs );
+    
+    an[4] = original - h;
+    flooding( an, refs[2], 0.0001 );
+    grad[4] += -8*cost_PLIC( an, refs );
+    
+    an[4] = original + 2*h;
+    flooding( an, refs[2], 0.0001 );
+    grad[4] += cost_PLIC( an, refs );
+
+    grad[4] /= 12*h;
+    an[4] = original;
+    
+}
+
+// cost function of PQIC 
+//  a (R^6) is coefficients for phi
+//  a0 (R^6) is reference data (a0[5] is vof)
 double cost( double a[], double a0[] )
 {
     init_bases();
@@ -188,6 +285,8 @@ double partial_approx( int i, int j, double a[], double vof, double h, double to
     partial += I( psis, ss, U, bases[i], false, q ) / vof;
 
     partial = partial / 12 / h;
+
+    a[j] = original;
 }
 
 void gradient_descent_step( double an[], double anp1[], double gamma, double refs[] )
@@ -199,7 +298,6 @@ void gradient_descent_step( double an[], double anp1[], double gamma, double ref
     for( int i = 0; i < 5; i++ )
         anp1[i] = an[i] - gamma*grad_an[i];
     
-
     flooding( anp1, refs[5], 0.0001 );
 }
 
