@@ -69,7 +69,7 @@ void gradient_descent_step_PLIC( double an[], double anp1[], double gamma, doubl
 {
     double grad_an[5];
     
-    partial_approx_PLIC( an, refs, grad_an );
+    cost_partial_PLIC( an, refs, grad_an );
 
     anp1[0] = anp1[1] = anp1[2] = 0.0;
     anp1[3] = an[3] - gamma*grad_an[3];
@@ -78,7 +78,7 @@ void gradient_descent_step_PLIC( double an[], double anp1[], double gamma, doubl
     flooding( anp1, refs[2], 0.0001 );
 }
 
-double partial_approx_PLIC( double an[], double refs[], double grad[] )
+double cost_partial_PLIC( double an[], double refs[], double grad[] )
 {
     double original, h = 0.00001;
 
@@ -133,7 +133,7 @@ double partial_approx_PLIC( double an[], double refs[], double grad[] )
 // cost function of PQIC 
 //  a (R^6) is coefficients for phi
 //  a0 (R^6) is reference data (a0[5] is vof)
-double cost( double a[], double a0[] )
+double cost_PQIC( double a[], double a0[] )
 {
     init_bases();
     double the_cost = 0;
@@ -155,6 +155,14 @@ double cost( double a[], double a0[] )
     }
 
     return the_cost;
+}
+
+double cost_PPIC( double p[], double ref[] )
+{
+    double a[6];
+    poly_coefficients( a, p );
+
+    return cost_PQIC( a, ref );
 }
 
 // Attempted analytical gradient function for QLIC method
@@ -231,7 +239,7 @@ void cost_gradient_disc( double a[], double refs[], double del_a[] )
     // Set up partials
     for( int i = 0; i < 5; i++ )
         for( int j = 0; j < 5; j++ ) 
-            partials[i][j] = partial_approx( i, j, a, refs[5], 0.00001, 0.0001 );
+            partials[i][j] = int_partial_PQIC( i, j, a, refs[5], 0.00001, 0.0001 );
     
 
     // Calculate gradient
@@ -244,7 +252,7 @@ void cost_gradient_disc( double a[], double refs[], double del_a[] )
 }
 
 // Approximate ith term of cost function with respecet to j
-double partial_approx( int i, int j, double a[], double vof, double h, double tol )
+double int_partial_PQIC( int i, int j, double a[], double vof, double h, double tol )
 {
     double partial = 0;
 
@@ -289,16 +297,101 @@ double partial_approx( int i, int j, double a[], double vof, double h, double to
     a[j] = original;
 }
 
-void gradient_descent_step( double an[], double anp1[], double gamma, double refs[] )
+// Take partial with respect to ith value in an
+double cost_partial_PQIC( double an[], double refs[], double grad[])
+{
+    double original, h = 0.00001;
+
+    for( int i = 0; i < 5; i++ )
+    {
+        grad[i] = 0;
+        original = an[i];
+
+        an[i] = original + 2*h; 
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += -cost_PQIC( an, refs );
+
+        an[i] = original + h;
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += 8*cost_PQIC( an, refs );
+        
+        an[i] = original - h;
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += -8*cost_PQIC( an, refs );
+        
+        an[i] = original + 2*h;
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += cost_PQIC( an, refs );
+
+        grad[i] /= 12*h;
+        an[i] = original;
+    }
+}
+
+double cost_partial_PPIC( double cn[], double refs[], double grad[] )
+{
+    double original, h = 0.00001;
+    double an[6];
+
+    for( int i = 0; i < 4; i++ )
+    {
+        grad[i] = 0;
+        original = cn[i];
+
+        cn[i] = original + 2*h; 
+        poly_coefficients( an, cn );
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += -cost_PQIC( an, refs );
+
+        cn[i] = original + h;
+        poly_coefficients( an, cn );
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += 8*cost_PQIC( an, refs );
+        
+        cn[i] = original - h;
+        poly_coefficients( an, cn );
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += -8*cost_PQIC( an, refs );
+        
+        cn[i] = original + 2*h;
+        poly_coefficients( an, cn );
+        flooding( an, refs[5], 0.0001 );
+        grad[i] += cost_PQIC( an, refs );
+
+        grad[i] /= 12*h;
+        cn[i] = original;
+    }
+}
+
+void gradient_descent_step_PQIC( double an[], double anp1[], double gamma, double refs[] )
 {
     double grad_an[5];
     
-    cost_gradient_disc( an, refs, grad_an );
+    cost_partial_PQIC( an, refs, grad_an );
 
     for( int i = 0; i < 5; i++ )
         anp1[i] = an[i] - gamma*grad_an[i];
     
     flooding( anp1, refs[5], 0.0001 );
+}
+
+void gradient_descent_step_PPIC( double cn[], double cnp1[], double gamma, double refs[] )
+{
+    double grad_cn[4];
+    double anp1[6];
+
+    cost_partial_PPIC( cn, refs, grad_cn );
+
+    for( int i = 0; i < 4; i++ )
+        cnp1[i] = cn[i] - gamma*grad_cn[i];
+
+    poly_coefficients( anp1, cnp1 );
+    double a = anp1[5];
+    flooding( anp1, refs[5], 0.0001 );
+    double c = anp1[5] - a;
+
+    cnp1[1] += c*cos( cnp1[3] );
+    cnp1[2] += c*sin( cnp1[3] );
 }
 
 void flooding( double a[], double vof, double tol )
@@ -372,6 +465,21 @@ void flooding( double a[], double vof, double tol )
     }
 
     test_vol;
+}
+
+// c is ( alpha (1/a), h, k, theta )
+void poly_coefficients( double a[], double c[] ) 
+{
+    double sinth = sin(c[3]);
+    double costh = cos(c[3]);
+    double cosmsin = c[2]*costh - c[1]*sinth;
+    
+    a[0] =  c[0]*sinth*sinth/4.0;
+    a[1] =  c[0]*costh*costh/4.0;
+    a[2] = -c[0]*costh*sinth/2.0;
+    a[3] =  c[0]/2.0*cosmsin - costh;
+    a[4] = -c[0]/2.0*cosmsin - sinth;
+    a[5] =  c[1]*costh + c[2]*sinth + c[0]/4.0*cosmsin*cosmsin;
 }
 
 void init_bases()
