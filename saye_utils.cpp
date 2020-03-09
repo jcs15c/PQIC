@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <set>
 #include <cmath>
 #include "saye_utils.h"
@@ -42,6 +43,8 @@ Point& Point::operator=( const Point x )
 	for( int i = 0; i < 3; i++ )
 		vals[i] = x.vals[i];
 	d = x.d;
+    
+    return *this;
 }
 
 int Point::getD()
@@ -52,8 +55,19 @@ int Point::getD()
 Box::Box()
 {	d = 0;   }
 
+Box::Box( const Box & U )
+{
+    d = U.d;
+    for( int i = 0; i < d; i++ )
+    {
+        x[i][0] = U.x[i][0];
+        x[i][1] = U.x[i][1];
+    }
+}
+
 Box::Box( double nxL[], double nxU[], int nd )
 {
+
 	for( int i = 0; i < nd; i++ )
 	{
 		x[i][0] = nxL[i];
@@ -166,6 +180,7 @@ double Phi2D::eval_k( Point x, int k )
     if( k == 1 )
         return 2*coeff[1]*x[1] + coeff[2]*x[0] + 
 				 coeff[4];
+    return 99999;
 }
 
 set<double> Phi2D::roots( Point x, double x1, double x2, int k )
@@ -228,6 +243,7 @@ double Phi3D::eval_k( Point x, int k )
     if( k == 2 )
         return 2*coeff[2]*x[2] + coeff[4]*x[1] + 
 				 coeff[5]*x[0] + coeff[8];
+    return 99999;
 }
 
 set<double> Phi3D::roots( Point x, double x1, double x2, int k )
@@ -394,10 +410,90 @@ double sign( double d )
     return 0;
 }
 
+void print_arr( double a[], int N )
+{
+    for( int i = 0; i < N; i++ )
+        printf("%.4f, ", a[i]);
+
+    printf("\b\b\n");
+}
+
 double dabs( double d )
 {
     if( d < 0 )
         return -d;
     return d;
+}
+
+// c is ( alpha (1/a), h, k, theta )
+void poly_coefficients( double a[], double c[] ) 
+{
+    double sinth = sin(c[3]);
+    double costh = cos(c[3]);
+    double cosmsin = c[2]*costh - c[1]*sinth;
+    
+    a[0] =  c[0]*sinth*sinth/4.0;
+    a[1] =  c[0]*costh*costh/4.0;
+    a[2] = -c[0]*costh*sinth/2.0;
+    a[3] =  c[0]/2.0*sinth*cosmsin - costh;
+    a[4] = -c[0]/2.0*costh*cosmsin - sinth;
+    a[5] =  c[1]*costh + c[2]*sinth + c[0]/4.0*cosmsin*cosmsin;
+}
+
+void line_to_param( double coeff[], double param[] )
+{
+    double a = coeff[3];
+    double b = coeff[4];
+    double c = coeff[5];
+
+    double xs[2], ys[2]; 
+    int i=0;
+    
+    if( -c/a > 0 && -c/a < 1 )
+    {
+        xs[i] = -c/a;
+        ys[i] = 0;
+        i++;
+    }
+
+    if( -c/b >= 0 && -c/b <= 1 )
+    {
+        xs[i] = 0;
+        ys[i] = -c/b;
+        i++;
+    }
+
+    if( -(c+a)/b >= 0 && -(c+a)/b <= 1 )
+    {
+        xs[i] = 1;
+        ys[i] = -(a+c)/b;
+        i++;
+    }
+
+    if( -(c+b)/a > 0 && -(c+b)/a < 1)
+    {
+        xs[i] = -(c+b)/a;
+        ys[i] = 1;
+        i++;
+    }
+
+    param[0] = 0.0;
+    param[1] = 0.5 * ( xs[0] + xs[1] );
+    param[2] = 0.5 * ( ys[0] + ys[1] );
+    param[3] = atan(1)*4 + atan2( b, a );
+    //if( a < 0 )
+    //    param[3] = atan(1)*4 + atan( b / a );
+    //else
+    //    param[3] =  atan( b / a );
+}
+
+
+void scaling( double a[] )
+{
+    double the_max = 0;
+    for(int i = 0; i < 6; i++ )
+        the_max = ( the_max > dabs(a[i]) ) ? the_max : dabs(a[i]);
+    for(int i = 0; i < 6; i++ )
+        a[i] = a[i] / the_max;
 }
 

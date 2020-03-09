@@ -39,4 +39,7 @@ double F_surf( Point x, F_params * fp, Psi phi, double x1, double x2, int k );
 double I( vector<Psi> psis, vector<int> ss, const Box& U, F_params * fp,
           bool S, int q, int depth = 0 );
 
+double box_symdiff( int N, double xL, double xU, double yL, double yU, double a[] );
+double quad_symdiff( double a[], double b[] );
+
 #endif

@@ -24,6 +24,7 @@ class Box
 {
 public:
 	Box();
+    Box( const Box & U );
 	Box( double xL[], double xU[], int d );
 	const double* operator[]( int dir ) const;
 	void split( Box& U1, Box& U2 ) const;
@@ -100,7 +101,14 @@ private:
 set<double> quadratic( double a, double b, double c, double x1, double x2 );
 double sgn( int m, int s, bool S, int sigma );
 double sign( double d );
+
+void print_arr( double a[], int N );
+
 double dabs( double d );
 
+void poly_coefficients( double a[], double c[] ); 
+void line_to_param( double coeff[], double param[] );
+
+void scaling( double a[] );
 #endif
 
