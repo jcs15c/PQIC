@@ -53,17 +53,17 @@ double cost_PLIC( double a[], double ref[], Box U )
     Phi2D phi0( coeffs );
     vector<Psi> psis{ Psi( &phi0 ) };
     vector<int> ss{-1};
-
+    int q = 10;
     // double xL[2] = {-1, -1};
     // double xU[2] = { 1,  1};
     // Box U( xL, xU, 2 );
     
     double temp;
     // double init_coeff[6];
-    temp = ( I( psis, ss, U, &cx, false, 5 ) / ref[5] - ref[3] );
+    temp = ( I( psis, ss, U, &cx, false, q ) / ref[5] - ref[3] );
     the_cost += temp*temp;
 
-    temp = ( I( psis, ss, U, &cy, false, 5 ) / ref[5] - ref[4] );
+    temp = ( I( psis, ss, U, &cy, false, q ) / ref[5] - ref[4] );
     the_cost += temp*temp;
     
     return the_cost;
@@ -111,6 +111,42 @@ void gdescent_direct_PQIC( double an[], double anp1[], double gamma, double refs
 }
 */
 
+void linear_MOF( double refs[], Box U, double error_tols[], double final_coeffs[], int max_iter )
+{
+    double unit_refs[6];
+    double unit_coeffs[6];
+    double unit_init_coeffs[6];
+    transform_refs_to_unit( refs, unit_refs, U );
+
+    // IN [0,1]^2 MODE
+
+    double init_params[4] = {0, 1 - unit_refs[5], 0, 0};
+
+    // Dont do any of this if the box is full or empty
+    if( unit_refs[5] <= 1e-5 )
+    {
+        poly_coefficients( unit_coeffs, init_params );
+        transform_coeffs_to_nonunit( unit_coeffs, final_coeffs, U );
+        final_coeffs[0] = final_coeffs[1] = final_coeffs[2] = 0;
+        final_coeffs[3] = final_coeffs[4] = 0; 
+        final_coeffs[5] = 1;
+        return;
+    }
+    if( unit_refs[5] >= 1 - 1e-5 )
+    {
+        poly_coefficients( unit_coeffs, init_params );
+        transform_coeffs_to_nonunit( unit_coeffs, final_coeffs, U );
+        final_coeffs[0] = final_coeffs[1] = final_coeffs[2] = 0;
+        final_coeffs[3] = final_coeffs[4] = 0; 
+        final_coeffs[5] = -1;
+        return;
+    }
+    
+    linear_MOF_bisection_unit( unit_refs, error_tols, init_params, max_iter ); // get parameters for best line
+    poly_coefficients( unit_coeffs, init_params ); // gets coefficients from parameters
+    transform_coeffs_to_nonunit( unit_coeffs, final_coeffs, U );
+}
+
 // Do the linear MOF on the unit circle
 void linear_MOF_unit( double refs[], double error_tols[], double final_params[], int max_iter )
 {
@@ -132,21 +168,9 @@ void linear_MOF_unit( double refs[], double error_tols[], double final_params[],
     double an[4] = {0, 1 - refs[5], 0, 0};
 
     double min_theta, min_cost = 100000;
-    // Select initial condition kinda ad hoc
-    for( an[3] = 0; an[3] < 8*atan(1); an[3] += 0.5 )
-    {
-        para_flooding( an, refs[5], U, flood_tol );
-        if( cost_PLIC( an, refs, U ) < min_cost )
-        {
-            min_cost = cost_PLIC( an, refs, U );
-            min_theta = an[3];
-            printf( "Min cost: %f, Min theta: %f\n", min_cost, min_theta );
-        }
-    }
-    
-    // Start with the best guess
-    an[3] = min_theta;
-    para_flooding( an, refs[5], U, flood_tol );
+
+    // Select initial condition based on bisection method
+    linear_MOF_bisection_unit( refs, error_tols, an, max_iter ); 
 
     double anp1[4] = {0, 0, 0, 0};
     double anm1[4] = {0, 0, 0, 0};
@@ -159,8 +183,8 @@ void linear_MOF_unit( double refs[], double error_tols[], double final_params[],
     this_moment_err = cost_PLIC( an, refs, U );
     moment_errs.push_back( this_moment_err );
     
-    printf( "L: 0 %.10f | %f %f %f %f | ---- ----\n", this_moment_err, an[0], an[1], an[2], an[3] );
-
+    //printf( "L: 0 %.10f | %f %f %f %f | ---- ----\n", this_moment_err, an[0], an[1], an[2], an[3] );
+    printf("%.10f", this_moment_err);
     /*
     // Calculate first gradient
     cost_fdm_PLIC( an, refs, U, gradn, gradient_tol, flood_tol );  
@@ -191,18 +215,18 @@ void linear_MOF_unit( double refs[], double error_tols[], double final_params[],
         cost_fdm_PLIC( an, refs, U, gradn, gradient_tol, flood_tol );  
 
         // Calculate gamma
-        gamma_num = gamma_den = 0;
-        for( int j = 3; j < 4; j++ )
-        {
-            gamma_num += ( an[j] - anm1[j] ) * ( gradn[j] - gradnm1[j] );
-            gamma_den += ( gradn[j] - gradnm1[j] ) * ( gradn[j] - gradnm1[j] );
-        }
+        //gamma_num = gamma_den = 0;
+        //for( int j = 3; j < 4; j++ )
+        //{
+        //    gamma_num += ( an[j] - anm1[j] ) * ( gradn[j] - gradnm1[j] );
+        //    gamma_den += ( gradn[j] - gradnm1[j] ) * ( gradn[j] - gradnm1[j] );
+        //}
         gamma = 100.0;//dabs( gamma_num ) / gamma_den;
         
         // Backstepping parts
         //printf("L: %d Goal: %f, %f, %d\n", i, moment_errs[i-1], moment_errs.back(), moment_errs[i-1] == moment_errs.back() );
         int bs = 0;
-        for( bs = 0; bs < 100; bs++ )
+        for( bs = 0; bs < 25; bs++ )
         {
             // Do the steepest descent
             anp1[0] = 0;
@@ -219,18 +243,17 @@ void linear_MOF_unit( double refs[], double error_tols[], double final_params[],
             if( moment_errs[i] > moment_errs[i-1] )
             {
                 moment_errs.pop_back();
-                gamma = gamma * 0.9;
+                gamma = gamma * 0.5;
             }
             else
                 break;
         }
-        if( bs == 100 )
+        if( bs == 25 )
         {
             moment_errs.push_back( this_moment_err );
             //printf( "L: Can't backstep enough\n" );
         }
-        printf( "L: %d %.10f | %f %f %f %f | %f %f\n", i, this_moment_err, anp1[0], anp1[1], anp1[2], anp1[3], gamma, gradn[3] );
-
+        //printf( "L: %d %.10f | %f %f %f %f | %f %f\n", i, this_moment_err, anp1[0], anp1[1], anp1[2], anp1[3], gamma, gradn[3] );
         // Refresh the old information
         for( int j = 0; j < 4; j++ )
         {
@@ -239,15 +262,88 @@ void linear_MOF_unit( double refs[], double error_tols[], double final_params[],
             gradnm1[j] = gradn[j];
         }
         
-        break_cond = 0;
-        for( int j = 3; j < 4; j++ )
-            break_cond += gradn[j]*gradn[j];
-        if( sqrt( break_cond ) < steepest_tol )
-            break;
+        //break_cond = 0;
+        //for( int j = 3; j < 4; j++ )
+        //    break_cond += gradn[j]*gradn[j];
+        //if( sqrt( break_cond ) < steepest_tol )
+        //    break;
     }
 
     for( int j = 0; j < 4; j++ )
         final_params[j] = anp1[j];
+}
+
+void linear_MOF_bisection_unit( double unit_refs[], double error_tols[], double final_params[], int max_iter )
+{
+    double error_tol = error_tols[0];
+    double flood_tol = 1e-9;//error_tols[2];
+
+    double xL[2] = {0, 0};
+    double xU[2] = {1, 1};
+    Box UnitU( xL, xU, 2 );
+    
+    double init_params[4] = {0, 0.5, 0.5, 0};
+
+    double R = 0.5 * (sqrt(5) - 1);
+    double a = -2*atan(1);
+    double b = 10*atan(1);
+    double d = R * (b - a);
+
+    double x1 = a + d, x2 = b - d;
+    
+    init_params[3] = x1;
+    para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+    
+    double Cx1 = -cost_PPIC( init_params, unit_refs, UnitU );
+
+    init_params[0] = 0;
+    init_params[1] = 0.5;
+    init_params[2] = 0.5;
+    init_params[3] = x2;
+    para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+    double Cx2 = -cost_PPIC( init_params, unit_refs, UnitU );
+       
+    double interval, theta;
+    for( int i = 0; i < max_iter; i++ )
+    {
+        d = R * d;
+        if( Cx1 > Cx2 )
+        {
+            a = x2;
+            x2 = x1; Cx2 = Cx1;
+            x1 = a + d;
+            init_params[0] = 0;
+            init_params[1] = 0.5;
+            init_params[2] = 0.5;
+            init_params[3] = x1;
+            para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+            Cx1 = -cost_PPIC( init_params, unit_refs, UnitU );
+        }
+        else
+        {
+            b = x1;
+            x1 = x2; Cx1 = Cx2;
+            x2 = b - d;
+            init_params[0] = 0;
+            init_params[1] = 0.5;
+            init_params[2] = 0.5;
+            init_params[3] = x2;
+            para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+            Cx2 = -cost_PPIC( init_params, unit_refs, UnitU );
+        }
+   
+        theta = 0.5 * (a + b);
+        interval = b - a;
+        //printf("%d | interval length: %.6f | theta: %.6f\n", i, interval, theta );
+        if( interval < error_tol )
+            break;
+    }
+    
+    final_params[0] = 0.0;
+    final_params[1] = 0.5;
+    final_params[2] = 0.5;
+    final_params[3] = 0.5 * (a + b);
+    para_flooding( final_params, unit_refs[5], UnitU, flood_tol );
 }
 
 // refs are in U, we want to transform to [0,1], get the optimal coefficients in [0,1], then transform back to U
@@ -263,6 +359,10 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
     double unit_init_coeffs[6];
     transform_refs_to_unit( refs, unit_refs, U );
 
+    double true_coeffs[6] = {4, 1, 0, 0, 0, -1};
+    double test_coeffs[6];
+    double test_coeffs_nonunit[6];
+
     double xL[2] = {0, 0};
     double xU[2] = {1, 1};
     Box UnitU( xL, xU, 2 );
@@ -272,18 +372,22 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
     double init_params[4] = {0, 1 - unit_refs[5], 0, 0};
 
     // Dont do any of this if the box is full or empty
-    if( unit_refs[5] <= 0 )
+    if( unit_refs[5] <= 1e-5 )
     {
         poly_coefficients( unit_coeffs, init_params );
         transform_coeffs_to_nonunit( unit_coeffs, final_coeffs, U );
+        final_coeffs[0] = final_coeffs[1] = final_coeffs[2] = 0;
+        final_coeffs[3] = final_coeffs[4] = 0; 
         final_coeffs[5] = 1;
         init_coeffs[5] = 1;
         return;
     }
-    if( unit_refs[5] >= 1 )
+    if( unit_refs[5] >= 1 - 1e-5 )
     {
         poly_coefficients( unit_coeffs, init_params );
         transform_coeffs_to_nonunit( unit_coeffs, final_coeffs, U );
+        final_coeffs[0] = final_coeffs[1] = final_coeffs[2] = 0;
+        final_coeffs[3] = final_coeffs[4] = 0; 
         final_coeffs[5] = -1;
         init_coeffs[5] = -1;
         return;
@@ -291,10 +395,10 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
     
     double coeff[6];
 
-    double gamma = 0.001, gamma_num, gamma_den;
+    double gamma = 1.0, gamma_num, gamma_den;
 
     vector<double> moment_errs;
-    double this_moment_err;
+    double this_moment_err, this_symdiff, this_curvature;
 
     // Store coefficients
     double an[4];
@@ -308,11 +412,95 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
     if( guess_type == 'l' )
     {
         double init_coeffs[6];
-        linear_MOF_unit( unit_refs, error_tols, init_params, max_iter ); // get parameters for best line
-        //line_to_param( unit_init_coeffs, init_params ); // turns coefficients into parameters?
-        //scaling( unit_init_coeffs ); // scales the coefficients???
+        linear_MOF_bisection_unit( unit_refs, error_tols, init_params, max_iter ); // get parameters for best line
+        para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
         poly_coefficients( unit_init_coeffs, init_params ); // gets coefficients from parameters
+        line_to_param( unit_init_coeffs, init_params ); // centers the vertex in the box
         init_params[3] = fmod( init_params[3], 8*atan(1) ); // shrinks angle
+    }
+
+    if( guess_type == 'h' )
+    {
+        int j;
+        double init_coeffs[6];
+        linear_MOF_bisection_unit( unit_refs, error_tols, init_params, max_iter ); // get parameters for best line
+        para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+        poly_coefficients( unit_init_coeffs, init_params ); // gets coefficients from parameters
+        line_to_param( unit_init_coeffs, init_params ); // centers the vertex in the box
+        init_params[3] = fmod( init_params[3], 8*atan(1) ); // shrinks angle
+
+        
+        //visualize_alpha( init_params, unit_refs, UnitU, 1e-9, "a_visualized.png" );
+        //visualize_MOF( unit_refs, UnitU, flood_tol, "at_visualized.png" );
+        
+        double op[4] = {0, init_params[1], init_params[2], init_params[3]};
+        double best_a, best_cost = 10000;
+        double trials[3] = {1, 2, 3};
+        double as[100];
+        double grads[100];
+        double costs[100];
+        
+        // Loop over the three initial guesses ( -5, 0, and 5 )
+        double this_tol = 1e-6;
+        for( int i = 0; i < 3; i++ )
+        {
+            init_params[0] = as[0] = trials[i];
+            init_params[1] = op[1];
+            init_params[2] = op[2];
+            init_params[3] = op[3];
+            para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+            grads[0] = alpha_centered_fdm( init_params, unit_refs, UnitU, 1e-6, flood_tol );
+            costs[0] = cost_PPIC( init_params, unit_refs, UnitU );
+
+            init_params[0] = as[1] = as[0] - grads[0];
+            init_params[1] = op[1];
+            init_params[2] = op[2];
+            init_params[3] = op[3];
+            para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+            grads[1] = alpha_centered_fdm( init_params, unit_refs, UnitU, 1e-6, flood_tol );
+            costs[1] = cost_PPIC( init_params, unit_refs, UnitU );
+
+            gamma = 10;//dabs( ( as[1] - as[0] ) / ( grads[1] - grads[0] ) );
+
+            // Try large positive alpha
+            for( j = 1; j < 99; j++ )
+            {
+                if( grads[j] == grads[j-1] ) //|| dabs( grads[i] ) < guess_tol )
+                //if( grads[i+1] == grads[i] )
+                    break;
+                
+                init_params[0] = as[j+1] = as[j] - gamma * grads[j];
+                init_params[1] = op[1];
+                init_params[2] = op[2];
+                init_params[3] = op[3];
+                para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
+        
+                costs[j+1] = cost_PPIC( init_params, unit_refs, UnitU );
+                grads[j+1] = alpha_centered_fdm( init_params, unit_refs, UnitU, 1e-6, flood_tol );
+                
+                if( costs[j+1] > costs[j] )
+                {
+                    j--;
+                    gamma = gamma * 0.5;
+                    continue;
+                }
+
+                gamma = dabs( (as[j+1] - as[j] ) / ( grads[j+1] - grads[j] ) );
+                //printf("%.1f, %d: alpha: %f grad: %f cost: %f\n", trials[i], j+1, as[j+1], grads[j+1], costs[j+1] );
+            }
+
+            if( costs[j] < best_cost )
+            {
+                best_cost = costs[j];
+                best_a = as[j];
+            }
+        }
+        
+        init_params[0] = best_a;
+        init_params[1] = op[1];
+        init_params[2] = op[2];
+        init_params[3] = op[3];
+        para_flooding( init_params, unit_refs[5], UnitU, flood_tol );
     }
 
     if( guess_type == 'p' )
@@ -321,21 +509,21 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
         int n_hidden_nodes = NN_data[1];
 
         // Save filenames so you dont need to recompute evrytime
-        // char input_fn[50];
-        // char output_fn[50]; 
+        char input_fn[50];
+        char output_fn[50]; 
         char centers_fn[50]; 
         char weights_fn[50];
 
-        // sprintf( input_fn, "rbf_data2/input%d.csv", n_test_data);
-        // sprintf( output_fn, "rbf_data2/output%d.csv", n_test_data);
+        sprintf( input_fn, "rbf_data2/input%d.csv", n_test_data);
+        sprintf( output_fn, "rbf_data2/output%d.csv", n_test_data);
         sprintf( centers_fn, "rbf_data2/centers%d_%d.csv", n_test_data, n_hidden_nodes);
         sprintf( weights_fn, "rbf_data2/weights%d_%d.csv", n_test_data, n_hidden_nodes);
-       
-        /*
+        
+        
         get_training_data_para( n_test_data, input_fn, output_fn ); 
         get_centers( n_hidden_nodes, input_fn, output_fn, centers_fn );
         get_weights( input_fn, output_fn, centers_fn, weights_fn ); 
-        */
+        
 
         eval_network( unit_refs, init_params, centers_fn, weights_fn );
 
@@ -352,59 +540,39 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
 
     this_moment_err = cost_PPIC( an, unit_refs, UnitU );
     moment_errs.push_back( this_moment_err );
-    printf( "0 %.10f | %f %f %f %f | %f\n", this_moment_err, an[0], an[1], an[2], an[3], gamma );
+    //printf( "0 %.10f | %f %f %f %f | %f\n", this_moment_err, an[0], an[1], an[2], an[3], gamma );
+    
+    poly_coefficients( test_coeffs, an );
+    this_symdiff = quad_symdiff( test_coeffs, true_coeffs, UnitU, 15 );
+    this_curvature = calc_curvature( test_coeffs, an[1], an[2] );
+    printf("0: %.10f\t%.10f\t%.10f\t(%.10f)\n", this_moment_err, this_symdiff, this_curvature, an[0]/2);
 
-    /*
-    // Calculate first gradient
-    cost_fdm_PPIC( an, unit_refs, UnitU, gradn, gradient_tol, flood_tol );  
-
-    // Do the first steepest descent
-    for( int j = 0; j < 4; j++ )
-        anp1[j] = an[j] - gamma*gradn[j];
-    para_flooding( anp1, unit_refs[5], UnitU, flood_tol );
-    
-    this_moment_err = cost_PPIC( anp1, unit_refs, UnitU );
-    moment_errs.push_back( this_moment_err );
-    printf( "1 %.10f | %f %f %f %f | %f\n", this_moment_err, anp1[0], anp1[1], anp1[2], anp1[3], gamma );
-    
-    // Refresh the old information
-    for( int j = 0; j < 4; j++ )
-    {
-        anm1[j] = an[j];
-        an[j] = anp1[j];
-        gradnm1[j] = gradn[j];
-    }
-    */
-    
     double break_cond;
-    for( int i = 2; i < max_iter; i++ )
+    for( int i = 1; i < max_iter; i++ )
     {
     
-        /*
         // Calculate gradient
         cost_fdm_PPIC( an, unit_refs, UnitU, gradn, gradient_tol, flood_tol );  
 
         // Calculate gamma
-        gamma_num = gamma_den = 0;
-        for( int j = 0; j < 4; j++ )
-        {
-            gamma_num += ( an[j] - anm1[j] ) * ( gradn[j] - gradnm1[j] );
-            gamma_den += ( gradn[j] - gradnm1[j] ) * ( gradn[j] - gradnm1[j] );
-        }
-        gamma = 1.0;// dabs( gamma_num ) / gamma_den;
-        */
+        //gamma_num = gamma_den = 0;
+        //for( int j = 0; j < 4; j++ )
+        //{
+        //    gamma_num += ( an[j] - anm1[j] ) * ( gradn[j] - gradnm1[j] );
+        //    gamma_den += ( gradn[j] - gradnm1[j] ) * ( gradn[j] - gradnm1[j] );
+        //}
+        //gamma = dabs( gamma_num ) / gamma_den;
 
         // Backstepping parts
         //printf("%d Goal: %f, %f, %d\n", i, moment_errs[i-1], moment_errs.back(), moment_errs[i-1] == moment_errs.back() );
         int bs = 0;
-        gamma = 1.0;
-        for( bs = 0; bs < 100; bs++ ) 
+        gamma = 10.0;
+        for( bs = 0; bs < 50; bs++ ) 
         {
             // Do the steepest descent
             for( int j = 0; j < 4; j++ )
-                 anp1[j] = an[j];// - gamma*gradn[j];
-            anp1[ (i-2) % 4 ] = an[ (i-2) % 4 ] 
-            
+                 anp1[j] = an[j] - gamma*gradn[j];
+
             para_flooding( anp1, unit_refs[5], UnitU, flood_tol );
         
             this_moment_err = cost_PPIC( anp1, unit_refs, UnitU ); 
@@ -420,13 +588,22 @@ void parabolic_MOF( double refs[], Box U, char guess_type, double error_tols[], 
             else
                 break;
         }
-        if( bs == 100 )
+        if( bs == 50 )
         {
             moment_errs.push_back( this_moment_err );
             //printf("Can't backstep enough\n" );
         }
-        printf( "%d %.10f | %f %f %f %f | %f\n", i, this_moment_err, an[0], an[1], an[2], an[3], gamma );
+        //printf( "%d %.10f | %f %f %f %f | %f in %d\n", i, this_moment_err, an[0], an[1], an[2], an[3], gamma, bs );
         //printf("\n");
+        
+        poly_coefficients( test_coeffs, anp1 );
+        transform_coeffs_to_nonunit( test_coeffs, test_coeffs_nonunit, U );
+        this_symdiff = quad_symdiff( test_coeffs, true_coeffs, UnitU, 15 );
+        this_curvature = calc_curvature( test_coeffs_nonunit, anp1[1]*( U[0][1] - U[0][0] ) + U[0][0], 
+                                                              anp1[2]*( U[1][1] - U[1][0] ) + U[1][1] );
+        printf("%d: E:%.10f\tS:%.10f\tC:%.10f\t(%.10f,\t%.10f,\t%.10f,\t%.10f)\n", i, this_moment_err, this_symdiff, this_curvature, 
+                                                                                   anp1[0], anp1[1], anp1[2], anp1[3] );
+        //fprintf( stderr, "%d\n", i );
 
         char energy_str[50];
         char filename_str[50];
@@ -695,7 +872,7 @@ void cost_fdm_PLIC( double cn[], double refs[], Box U, double grad[], double h, 
     flooding( an, refs[5], U, flood_tol );
     grad[i] += cost_PQIC( an, refs, U );
 
-    grad[i] /= 12*h;
+    grad[i] = grad[i] / 12*h;
     cn[i] = original;
 }
 
@@ -714,7 +891,7 @@ double cost_PQIC( double a[], double a0[], Box U )
     //double xL[2] = {-1, -1};
     //double xU[2] = { 1,  1};
     //Box U( xL, xU, 2 );
-    int q = 5;
+    int q = 10;
     
     for( int i = 0; i < 5; i++ )
     {
@@ -745,7 +922,7 @@ void direct_PQIC( double an[], double refs[], double grad[] )
     double xL[2] = {-1, -1};
     double xU[2] = { 1,  1};
     Box U( xL, xU, 2 );
-    int q = 5;
+    int q = 10;
     
     init_bases();
     init_grad_bases( &phi0 );
@@ -776,7 +953,7 @@ void integral_fdm_PQIC( double an[], double refs[], Box U, double grad[] )
     // double xL[2] = {-1, -1};
     // double xU[2] = { 1,  1};
     // Box U( xL, xU, 2 );
-    int q = 5;
+    int q = 10;
     init_bases();
     
     double temp_error, temp_fdm, original;
@@ -854,12 +1031,85 @@ void cost_fdm_PQIC( double an[], double refs[], Box U, double grad[], double h, 
         flooding( an, refs[5], U, flood_tol );
         grad[i] += cost_PQIC( an, refs, U );
 
-        grad[i] /= 12*h;
+        grad[i] = grad[i] / 12*h;
         an[i] = original;
     }
 
     grad[5] = 0;
 }
+
+double alpha_forward_fdm( double cn[], double refs[], Box U, double h, double flood_tol )
+{
+    double original;
+    double grad = 0;
+    double an[6];
+
+    original = cn[0];
+
+    cn[0] = original + h;
+    poly_coefficients( an, cn );
+    flooding( an, refs[5], U, flood_tol);
+    grad += cost_PQIC( an, refs, U );
+
+    cn[0] = original;
+    poly_coefficients( an, cn );
+    flooding( an, refs[5], U, flood_tol );
+    grad += -cost_PQIC( an, refs, U );
+    
+    grad = grad / h;
+    cn[0] = original;
+
+    return grad;
+}
+
+double alpha_backward_fdm( double cn[], double refs[], Box U, double h, double flood_tol )
+{
+    double original;
+    double grad = 0;
+    double an[6];
+
+    original = cn[0];
+
+    cn[0] = original;
+    poly_coefficients( an, cn );
+    flooding( an, refs[5], U, flood_tol);
+    grad += cost_PQIC( an, refs, U );
+
+    cn[0] = original + h;
+    poly_coefficients( an, cn );
+    flooding( an, refs[5], U, flood_tol );
+    grad += -cost_PQIC( an, refs, U );
+    
+    grad = grad / h;
+    cn[0] = original;
+
+    return grad;
+}
+
+double alpha_centered_fdm( double cn[], double refs[], Box U, double h, double flood_tol )
+{
+    double original;
+    double grad = 0;
+    double an[6];
+
+    original = cn[0];
+
+    cn[0] = original + h;
+    poly_coefficients( an, cn );
+    flooding( an, refs[5], U, flood_tol);
+    grad += cost_PQIC( an, refs, U );
+
+    cn[0] = original - h;
+    poly_coefficients( an, cn );
+    flooding( an, refs[5], U, flood_tol );
+    grad += -cost_PQIC( an, refs, U );
+    
+    grad = grad / 2 / h;
+    cn[0] = original;
+
+    return grad;
+}
+
 
 void cost_fdm_PPIC( double cn[], double refs[], Box U, double grad[], double h, double flood_tol )
 {
@@ -912,7 +1162,31 @@ void visualize_MOF( double refs[], Box U, double flood_tol, const char* filename
         thetas.push_back( theta );
     }
 
-    plot_linear_MOF( costs, thetas, filename );
+    plot_line( thetas, costs, filename );
+}
+
+void visualize_alpha( double params[], double refs[], Box U, double flood_tol, const char* filename )
+{
+    double da = 0.01;
+    double a, cost;
+    vector<double> costs;
+    vector<double> as;
+
+    double h = params[1];
+    double k = params[2];
+    double theta = params[3];
+
+    for( a = 0; a < 3; a += da )
+    {
+        double new_params[] = {a, h, k, theta};
+        para_flooding( new_params, refs[5], U, flood_tol );
+        cost = cost_PPIC( new_params, refs, U );
+        costs.push_back( cost );
+        as.push_back( a );
+        printf( "VIS: a: %f, cost: %f\n", a, cost );
+    }
+
+    plot_line( as, costs, filename );
 }
 
 void para_flooding( double c[], double vof, Box U, double tol )
@@ -938,7 +1212,7 @@ void flooding( double a[], double vof, Box U, double tol )
     //double xL[2] = {0, 0};
     //double xU[2] = { 1,  1};
     //U = Box( xL, xU, 2 );
-    int q = 5;
+    int q = 10;
     Unit unit;
 
     Phi2D phi0( a );
@@ -1006,6 +1280,23 @@ void flooding( double a[], double vof, Box U, double tol )
 
 }
 
+double calc_curvature( double coeffs[], double x, double y )
+{
+    double f = 2 * coeffs[0] * x + coeffs[2] * y + coeffs[3];
+    double fx = 2 * coeffs[0];
+    double fy = coeffs[2];
+
+    double g = 2 * coeffs[1] * y + coeffs[2] * x + coeffs[4];
+    double gx = coeffs[2];
+    double gy = 2 * coeffs[1];
+
+    double h = sqrt( f * f + g * g );
+    double hx = ( f * fx + g * gx ) / h;
+    double hy = ( f * fy + g * gy ) / h;
+
+    return ( h * fx - f * hx + h * gy - g * hy ) / h / h;
+}
+
 void get_refs( Box U, double coeffs[], double refs[] )
 {
     Phi2D phi0( coeffs );
@@ -1013,7 +1304,7 @@ void get_refs( Box U, double coeffs[], double refs[] )
     vector<int> ss{ -1 };
 
     bool S = false;
-    int q = 5;
+    int q = 10;
 
     Unit unit;
     refs[5] = I( psis, ss, U, &unit, S, q );
@@ -1119,7 +1410,7 @@ double box_symdiff( int N, double xL, double xU, double yL, double yU, double a[
 }
 
 
-double quad_symdiff( double a[], double b[] )
+double quad_symdiff( double a[], double b[], Box U, int q )
 {
     Phi2D phia( a );
     Phi2D phib( b );
@@ -1128,17 +1419,21 @@ double quad_symdiff( double a[], double b[] )
     vector<int> ssa{ -1, 1 };
     vector<int> ssb{ 1, -1 };
 
-    double xL[2] = {-1, -1};
-    double xU[2] = { 1,  1};
-    Box U( xL, xU, 2 );
-
     bool S = false;
-    int q = 5;
 
     Unit vof;
 
     return I( psis, ssa, U, &vof, S, q ) + I( psis, ssb, U, &vof, S, q );
 }
+
+
+double get_curvature( double coeff[] )
+{
+
+
+
+}
+
 
 void init_bases()
 {
