@@ -21,7 +21,7 @@ int main()
     //transform_refs_to_unit( refs, refs_t, U );
     double coeff[6] = {0, 0, 0, -2, -4, 3};
     transform_coeffs_to_nonunit( coeff, coeff_t, U );
-    //poly_coefficients( coeff, params );
+    //poly_coefficients( coeff, params ); 
     //for( int i = 1; i < 6; i++ )
     //    coeff[i] = coeff[i] / coeff[0];
     //coeff[0] = 1.0;
