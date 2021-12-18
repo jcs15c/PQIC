@@ -42,4 +42,4 @@ double I( vector<Psi> psis, vector<int> ss, const Box& U, F_params * fp,
 double box_symdiff( int N, double xL, double xU, double yL, double yU, double a[] );
 double quad_symdiff( double a[], double b[] );
 
-#endif
+#endif 
