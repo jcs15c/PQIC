@@ -1,4 +1,4 @@
-CC = g++
+CC = g++ 
 CFLAGS = -g -Wall -std=c++11
 
 .PHONY: debug
