@@ -2,7 +2,7 @@
 #include "saye_utils.h"
 #include "matplotlibcpp.h"
 #include "level_set_plot.h"
-namespace plt = matplotlibcpp;
+namespace plt = matplotlibcpp; 
 
 void plot_2D( double a[], double ref_x, double ref_y, const char * filename )
 {
