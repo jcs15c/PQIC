@@ -61,7 +61,7 @@ int main()
 
     // return 0;
     // Get reference data
-    for( int i = 0; i < N; i++ )
+    for( int i = 0; i < N; i++ ) 
     {
         for( int j = 0; j < N; j++ )
         {
