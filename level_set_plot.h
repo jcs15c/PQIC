@@ -1,7 +1,7 @@
 #ifndef LEVELPLOT
 #define LEVELPLOT
 
-#include <vector>
+#include <vector> 
 
 void plot_2D( double a[], double ref_x, double ref_y, const char * filename );
 void plot_2D_reference( double a[], double b[], Box U, const char * energy, const char * filename );
