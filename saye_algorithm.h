@@ -5,7 +5,7 @@
 using namespace std;
 
 class F_params
-{
+{ 
 public:
     F_params();
     F_params( const F_params & fp );
