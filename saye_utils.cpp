@@ -4,7 +4,7 @@
 #include "saye_utils.h"
 using namespace std;
 
-Point::Point()
+Point::Point() 
 {
 	for( int i = 0; i < 3; i++ )
 		vals[i] = -1;
