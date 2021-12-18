@@ -1,5 +1,5 @@
 #ifndef GRADDESC
-#define GRADDESC
+#define GRADDESC 
 
 #include "saye_utils.h"
 
