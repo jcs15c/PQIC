@@ -86,7 +86,7 @@ int main()
 
     xU[0] = 4;
     xU[1] = 4;
-    
+     
     U = Box( xL, xU, 2 );
             
     //parabolic_MOF( refs[k], U, guess_type, error_tols, final_coeffs[k], max_iter );
