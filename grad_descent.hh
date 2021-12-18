@@ -8,7 +8,7 @@ double cost_PQIC( double a[], double a0[] );
 double cost_partial_PQIC( double an[], double refs[], double grad[]);
 void gradient_descent_step_PQIC( double an[], double anp1[], double gamma, double refs[] );
 
-double cost_PPIC( double a[], double a0[] );
+double cost_PPIC( double a[], double a0[] ); 
 double cost_partial_PPIC( double cn[], double refs[], double grad[] );
 void gradient_descent_step_PPIC( double cn[], double cnp1[], double gamma, double refs[] );
 
